@@ -4,8 +4,8 @@
 
 class Trie {
 
-	// Unneeded for node to store char it represents when
-	// parent already does in children map
+	// Unneeded for node to store char when parent
+	// already does in parent's children map
 	class Node {
 		bool isWord;
 		Node* parent;
@@ -16,13 +16,14 @@ class Trie {
 		Node(bool isWord = false, Node* parent = nullptr) :
 			isWord(isWord), parent(parent) {}
 
+		// Return node at end of longest present prefix of str
 		Node* find(const std::string& str, size_t& depth) {
 			std::unordered_map<char, Node*>::iterator it;
 
 			Node* current = this;
 
 			// While char still to find, traverse down child
-			// matching next char to find if such child is present
+			// matching next char to find if child is present
 			for (size_t len = str.size(); depth < len; depth++) {
 
 				it = current->children.find(str[depth]);
@@ -41,7 +42,7 @@ class Trie {
 			Node* current = find(str, depth);
 
 			// Case: Existing prefix adequately covers word
-			//		 If word is already marked, none is added
+			//		 If word is already marked, no need to mark
 			if (depth == str.size()) {
 				if (current->isWord) return false;
 				current->isWord = true;
@@ -57,92 +58,42 @@ class Trie {
 			return true;
 		}
 
-		// Return child so can append to newly appended char
+		// Return child so can easily extend newly appended char
 		Node* append(char c, bool isWord = false) {
 			Node* child = new Node(isWord, this);
 			children.emplace(c, child);
 			return child;
 		}
 
-		// When removing word, remove those nodes that  
-		// were needed previously because they held 
-		// prefix of removed word and are no longer needed
+		// Upon remove word, remove nodes holding prefix of
+		// str and are prefix of no other word and is needed 
+		// no longer. Del highest such then rest recursively 
 		bool remove(const std::string& str) {
-
-			// Resolve null case distinctly for simplicity
 			if (str.empty()) return true;
+			size_t depth = 0;
 
-			Node* cand = nullptr;
-			char candChar;
+			Node* current = find(str, depth);
+			if (depth < str.size() || !current->isWord) {
+				return false;
+			}
+			current->isWord = false;
 
-			Node* current = this;
-			size_t depth = 0, len = str.size();
-			std::unordered_map<char, Node*>::iterator it;
-  
-			for (; depth < len - 1; depth++) {
-				it = current->children.find(str[depth]);
-				if (it == current->children.end()) break;
-				current = it->second;
+			if (current->children.empty()) {
 
-				// Given depth < len - 1: Know this node doesn't
-				// hold str.back(). If it isWord or holds prefix
-				// for multiple words, even if 1 such word being
-				// str is removed, at least 1 other word will
-				// remain for which it is prefix
-				if (current->isWord || current->children.size() > 1) {
-					cand = nullptr;
+				// Move up if parent suffices to be deleted
+				// depth > 0: To avoid deleting root (depth 0)
+				while (depth > 0 && !current->parent->isWord &&
+					   current->parent->children.size() < 2) {
+					current = current->parent;
+					depth -= 1;
 				}
 
-				// !current->isWord && current->children.size() <= 1
-				// is known. Mark this as candidate unless previous
-				// cand is already present, for which then keep prev
-				// cand that would lead to longer erasable chain
-				else if (!cand) {
-					cand = current;
-					candChar = it->first;
-				}
+				// depth - 1: str[0] covered by node at depth 1
+				current->parent->children.erase(str[depth - 1]);
+				delete current;
 			}
 
-			// isPresent: True if str found and is not marked
-			bool isPresent = false;
-
-			// If (depth < len - 1) loop finished early, this
-			// will fail like it had before break -> return false
-			if ((it = current->children.find(str[depth]))
-				!= current->children.end()) {
-				current = it->second;
-				depth++;
-
-				if (depth == len && current->isWord) {
-					current->isWord = false;
-					isPresent = true;
-
-					// if (depth == len && current->isWord)
-					// Must remove word for cand to lead to node del
-
-					// current that holds removed word must have 
-					// no child and thus not be prefix 
-					// in order for node deletion to happen
-					// Notice prev candidate can have 1 child as
-					// current could be child to be removed
-					if (!current->children.empty()) cand = nullptr;
-
-					// If any other cand higher up was invalidated
-					// know current to not be prefix and !isWord
-					else if (!cand) {
-						cand = current;
-						candChar = it->first;
-					}
-
-					// Erase ptr to cand from its parent, then del
-					if (cand) {
-						cand->parent->children.erase(candChar);
-						delete cand;
-					}
-				}
-			}
-
-			return isPresent;
+			return true;
 		}
 
 		// Find longest present prefix. If that prefix covers
@@ -156,7 +107,7 @@ class Trie {
 		// Depth-first traverse trie, putting words into vector
 		void putWords(std::vector<std::string>& words, std::string& base) {
 
-			for (auto [c, child] : children) {
+			for (auto& [c, child] : children) {
 
 				base += c; // Traverse down 1
 				child->putWords(words, base);
